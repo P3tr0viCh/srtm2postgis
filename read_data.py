@@ -1,72 +1,117 @@
-# Read srtm data files and put them in the database.
-from osgeo import gdal, gdal_array
-import os
+from osgeo import gdal
 
 import re
-import zipfile
+import sys
 
-from data import util
+from database import *
+import database_connection
+from utils import *
 
-# Main functions
 
-def loadTile(continent, filename):
-  # Unzip it
-  zf = zipfile.ZipFile('data/' + continent + '/' + filename + ".hgt.zip")
-  for name in zf.namelist():
-    outfile = open('data/' + continent + '/' + name, 'wb')
-    outfile.write(zf.read(name))
-    outfile.flush()
-    outfile.close()
-  
-  # Read it
-  srtm = gdal.Open('data/' + continent + '/' + filename + '.hgt')
-  
-  # Clean up
-  os.remove('data/' + continent + '/' + filename + '.hgt')
-  
-  return gdal_array.DatasetReadAsArray(srtm)
+def main():
+    gdal.UseExceptions()
 
-def connectToDatabasePsycopg2(database):
-    conn = psycopg2.connect("dbname='" + database.db + "' host='localhost' user='" + database.db_user + "' password='" + database.db_pass + "'")
-    return conn.cursor()
+    if len(sys.argv) == 1:
+        print(
+            "Specify the continent: Africa, Australia, Eurasia, Islands, North_America or South_America,\n"
+            "or 'clear' to deleting tables from database."
+        )
+        exit()
 
-def posFromLatLon(lat,lon):
-  return (lat * 360 + lon) * 1200 * 1200
+    database = Database(
+        database_connection.db, database_connection.db_user, database_connection.db_pass
+    )
 
-def verify(db, number_of_tiles, files_hashes, continent, north, south, west, east):
-    # For every tile, verify the bottom left coordinate.
+    if "clear" in sys.argv:
+        print("Deleting tables from database.")
+
+        database.dropAllTables()
+
+        print("Done.")
+
+        exit()
+
+    database.createTableAltitude()
+
+    if "pos" in sys.argv:
+        if len(sys.argv) != 4:
+            print("Use: pos latitude longitude.")
+            exit()
+
+        lat = float(sys.argv[2])
+        lon = float(sys.argv[3])
+
+        print("{0}:{1}".format(lat, lon))
+
+        pos = posFromLatLon(lat, lon)
+
+        print(pos)
+
+        print("Done.")
+
+        exit()
+
+    continent = sys.argv[1]
+
+    verifyIsContinent(continent)
+
+    [north, south, west, east] = getBoundingBox(sys.argv, 3)
+
+    files_hashes = getFilesHashes(continent)
+
+    number_of_tiles = getNumberOfFiles(files_hashes, north, south, west, east)
+
+    if "verify" in sys.argv:
+        verify(
+            database, number_of_tiles, files_hashes, continent, north, south, west, east
+        )
+
+        print("Done.")
+
+        exit()
+
+    p = re.compile("[NSEW]\\d*")
+    resume_from = ""
+    try:
+        if p.find(sys.argv[2]):
+            resume_from = sys.argv[2]
+
+    except:
+        None
+
+    i = 0
+
     for file in files_hashes:
-      # Strip .hgt.zip extension:
-      file = file[1][0:-8] 
-    
-      [lat,lon] = util.getLatLonFromFileName(file)
-      
-      # Only a smaller part of Australia (see below):
-      if util.inBoundingBox(lat, lon, north, south, west, east):
-      
-        print "Verify " + file + "..." 
-    
-        # Get top left altitude from file:
-        coordinate_file = loadTile(continent, file)[1][0]
-    
-        # Get top left altitude from database:
-        coordinate_db = db.fetchTopLeftAltitude(lat,lon)
-        
-        if coordinate_db != coordinate_file:
-          print "Mismatch tile " + file[1]
-          exit() 
-    
-    # Check the total number of points in the database:
-    
-    print "Check the total number of points in the database..."
-    
-    sql = db.query("SELECT count(pos) FROM altitude")
-    total = int(sql.getresult()[0][0])
-    if not total == number_of_tiles * 1200 * 1200:
-      print "Not all tiles have been (completely) inserted!"
-      exit()
-        
-    print "All tiles seem to have made it into the database! Enjoy."
-    
-    exit()
+        file = file[1][0:-8]
 
+        [lat, lon] = getLatLonFromFileName(file)
+
+        if inBoundingBox(lat, lon, north, south, west, east):
+            i = i + 1
+
+            if resume_from == file:
+                resume_from = ""
+
+            if resume_from == "":
+                tile = loadTile(continent, file)
+
+                if tile is None:
+                    print(
+                        f"Skipping file (not exists) {file} ({i} of {number_of_tiles})."
+                    )
+                    continue
+
+                exists = database.fetchTopLeftAltitude(lat, lon)
+
+                if exists is None:
+                    print(f"Insert data for tile {file} ({i} of {number_of_tiles}).")
+
+                    database.insertTile(tile, lat, lon)
+                else:
+                    print(f"Skipping tile {file} ({i} of {number_of_tiles}).")
+
+    print("All tiles inserted. Verify the result with python read_data.py verify.")
+
+
+if __name__ == "__main__":
+    main()

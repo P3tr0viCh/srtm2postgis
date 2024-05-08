@@ -1,26 +1,27 @@
-# Runs tests for download.py
 import unittest
 
-# Import same libraries as download.py:
-from ftplib import FTP
-import urllib
+import requests
+
 
 class TestDownloadScript(unittest.TestCase):
-    
-    def testFtp(self):
-        # Make sure:
-        
-        print "Does the FTP server still exists and is it online?" 
-        self.ftp = FTP('e0srp01u.ecs.nasa.gov')
-        self.assert_(self.ftp.login())        
 
-        print "Is the data in the right folder?"
-        self.assert_(self.ftp.cwd("srtm/version2/SRTM3/Australia"))
-       
-        print "Are there 1060 files in that folder?"
-        self.files = self.ftp.nlst()
-        self.assertEqual(len(self.files),1060)
+    def testUrl(self):
+        site = "https://www.okmap.org"
 
-if __name__ == '__main__':
+        print("Does the server still exists and is it online?")
+        response = requests.get(site, stream=True)
+        self.assertEqual(response.status_code, 200)
+        print("OK")
+
+        url = f"{site}/srtm/version2_1/SRTM3/Eurasia/N00E072.hgt.zip"
+
+        print("Is the data in the right folder?")
+        response = requests.get(url, stream=True)
+        self.assertEqual(response.status_code, 200)
+        size = int(response.headers["Content-length"])
+        self.assertEqual(size, 4320)
+        print("OK")
+
+
+if __name__ == "__main__":
     unittest.main()
-
