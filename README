@@ -2,6 +2,28 @@ Script that imports the SRTM data in a PostGIS (PostgreSQL) database.
 
 http://wiki.openstreetmap.org/index.php/Route_altitude_profiles_SRTM#SRTM_import
 
+GDAL install:
+https://www.gisinternals.com/release.php
+Select release
+    release-1930-x64-gdal-3-8-5-mapserver-8-0-1
+Install
+    gdal-3.8.5-1930-x64-core.msi
+Extract
+    release-1930-x64-gdal-3-8-5-mapserver-8-0-1-libs.zip
+to %gdal_libs%
+Rename
+    %gdal_libs%\lib\gdal_i.lib to gdal.lib
+
+Adding Path Variables:
+PATH
+;C:\Program Files\GDAL
+GDAL_DATA=c:\Program Files\GDAL\gdal-data\
+GDAL_DRIVER_PATH=c:\Program Files\GDAL\gdalplugins\
+
+pip install wheel
+pip install setuptools
+pip install --global-option=build_ext --global-option="-I%gdal_libs%/include" --global-option="-l%gdal_libs%/lib" gdal[numpy]
+
 Usage:
 First run the tests that come with this script:
 
