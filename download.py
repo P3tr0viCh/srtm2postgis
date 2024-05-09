@@ -76,7 +76,7 @@ def main():
                     response.raise_for_status()
                 except requests.exceptions.HTTPError as error:
                     print(f"Error occurred: {error}")
-                    exit()
+                    continue
 
                 size = int(response.headers["Content-length"])
 
@@ -91,7 +91,7 @@ def main():
                         response.raise_for_status()
                     except requests.exceptions.HTTPError as error:
                         print(f"Error occurred: {error}")
-                        exit()
+                        continue
 
                     with open(filename, "wb") as file:
                         file.write(response.content)
