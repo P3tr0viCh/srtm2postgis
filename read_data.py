@@ -51,6 +51,42 @@ def main():
 
         exit()
 
+    if "tile" in sys.argv:
+        if len(sys.argv) != 4:
+            print("Use: tile latitude longitude.")
+            exit()
+
+        lat = float(sys.argv[2])
+        lon = float(sys.argv[3])
+
+        print("{0}:{1}".format(lat, lon))
+
+        tile = database.readTile(lat, lon)
+
+        print(tile)
+
+        print("Done.")
+
+        exit()
+
+    if "alt" in sys.argv:
+        if len(sys.argv) != 4:
+            print("Use: alt latitude longitude.")
+            exit()
+
+        lat = float(sys.argv[2])
+        lon = float(sys.argv[3])
+
+        print("{0}:{1}".format(lat, lon))
+
+        alt = database.altitude(lat, lon)
+
+        print(alt)
+
+        print("Done.")
+
+        exit()
+
     continent = sys.argv[1]
 
     verifyIsContinent(continent)

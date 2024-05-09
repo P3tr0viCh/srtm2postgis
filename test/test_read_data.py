@@ -91,9 +91,6 @@ class TestDatabase(unittest.TestCase):
         # Already tested in setUp()
         self.assert_(True)
 
-    def testDatabaseEmpty(self):
-        self.assert_(self.db_pg.checkDatabaseEmpty)
-
     def testTableAltitudeExists(self):
         # Call function to create table
         self.db_pg.createTableAltitude()

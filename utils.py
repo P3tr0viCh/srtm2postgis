@@ -3,7 +3,7 @@ import zipfile
 
 from osgeo import gdal, gdal_array
 
-from math import floor
+from math import floor, ceil
 
 import files
 import re
@@ -45,8 +45,8 @@ def getBoundingBox(sysargv, offset):
         south = int(sysargv[offset + 1])
         west = int(sysargv[offset + 2])
         east = int(sysargv[offset + 3])
-        
-        print("bounding box {0} <= lat <= {1} and {2} <= lon <= {3}".format(south, north, west, east))
+
+        print(f"Bounding box {south} <= lat <= {north} and {west} <= lon <= {east}.")
 
     except:
         north = 90
@@ -122,7 +122,7 @@ def loadTile(continent, filename):
 
     with gdal.Open(filepath_hgt) as srtm:
         if srtm is None:
-            print("Error: can't open {}".format(filepath_hgt))
+            print(f"Error: can't open {filepath_hgt}.")
             exit(1)
 
         result = gdal_array.DatasetReadAsArray(srtm)
@@ -132,27 +132,29 @@ def loadTile(continent, filename):
     return result
 
 
-def verify(database, number_of_tiles, files_hashes, continent, north, south, west, east):
+def verify(
+    database, number_of_tiles, files_hashes, continent, north, south, west, east
+):
     for file in files_hashes:
         file = file[1][0:-8]
 
         [lat, lon] = getLatLonFromFileName(file)
 
         if inBoundingBox(lat, lon, north, south, west, east):
-            print("Verify {}.".format(file))
+            print(f"Verify {file}")
 
             coordinate_file = loadTile(continent, file)
 
             if coordinate_file is None:
-                print("File {} not exists.".format(file))
+                print(f"File {file} not exists.")
                 continue
 
             coordinate_db = database.fetchTopLeftAltitude(lat, lon)
 
-            print (coordinate_db)
-            
+            print(coordinate_db)
+
             if coordinate_db != coordinate_file[1][0]:
-                print("Mismatch tile {}.".format(file[1]))
+                print(f"Mismatch tile {file[1]}")
                 continue
 
     print("Check the total number of points in the database.")
@@ -166,3 +168,36 @@ def verify(database, number_of_tiles, files_hashes, continent, north, south, wes
     print("All tiles seem to have made it into the database.")
 
     exit()
+
+
+def boundsFromLatLon(latitude, longitude):
+    lat0 = floor(latitude)
+    lon0 = floor(longitude)
+    pos0 = (lat0 * 360 + lon0) * 1200 * 1200
+
+    latPos = (1199.0 / 1200 - (latitude - lat0)) * 1200 * 1200
+    lonPos = (longitude - lon0) * 1200
+
+    latPosTop = floor(latPos / 1200) * 1200
+    latPosBottom = ceil(latPos / 1200) * 1200
+    lonPosLeft = floor(lonPos)
+    lonPosRight = ceil(lonPos)
+
+    a = (latPos - latPosTop) / 1200
+    b = lonPos - lonPosLeft
+
+    t1 = pos0 + latPosTop + lonPosLeft
+    tr = pos0 + latPosTop + lonPosRight
+    b1 = pos0 + latPosBottom + lonPosLeft
+    br = pos0 + latPosBottom + lonPosRight
+
+    return t1, tr, b1, br, a, b
+
+
+def bilinearInterpolation(tl, tr, bl, br, a, b):
+    b1 = tl
+    b2 = bl - tl
+    b3 = tr - tl
+    b4 = tl - bl - tr + br
+
+    return b1 + b2 * a + b3 * b + b4 * a * b

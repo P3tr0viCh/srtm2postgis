@@ -1,77 +1,16 @@
-import pg, psycopg2
+import psycopg2
 from psycopg2.extras import execute_values
 
 from math import sqrt
 
-from utils import posFromLatLon
-
-
-class DatabasePg:
-    def __init__(self, db_name, db_user, db_pass):
-        self.db = pg.DB(dbname=db_name, host="localhost", user=db_user, passwd=db_pass)
-
-    def checkDatabaseEmpty(self):
-        return self.db.get_tables() == [
-            "information_schema.sql_features",
-            "information_schema.sql_implementation_info",
-            "information_schema.sql_languages",
-            "information_schema.sql_packages",
-            "information_schema.sql_parts",
-            "information_schema.sql_sizing",
-            "information_schema.sql_sizing_profiles",
-            "public.geometry_columns",
-            "public.spatial_ref_sys",
-        ]
-
-    def readTile(self, lat0, lon0):
-        # Calculate begin and end position
-        begin = posFromLatLon(lat0, lon0)
-        end = posFromLatLon(lat0 + 1, lon0 + 1)
-        sql = self.db.query(
-            " \
-      SELECT \
-        alt \
-      FROM altitude \
-      WHERE \
-        pos >= "
-            + str(begin)
-            + "\
-        AND pos < "
-            + str(end)
-            + "\
-      ORDER BY pos ASC \
-    "
-        )
-        res = sql.getresult()
-
-        # Now turn the result into a 2D array
-
-        tile = []
-
-        # Calculate tile width (should be 1200, or 10 for test tiles)
-        tile_width = int(sqrt(len(res)))
-        i = 0
-        for x in range(tile_width):
-            row = []
-            for y in range(tile_width):
-                row.append(int(res[i][0]))
-                i = i + 1
-
-            tile.append(row)
-
-        return tile
-
-    def getTables(self):
-        return self.db.get_tables()
+from utils import posFromLatLon, boundsFromLatLon, bilinearInterpolation
 
 
 class Database:
 
     def __init__(self, db_name, db_user, db_pass):
-        self.db_name = db_name
-
         self.conn = psycopg2.connect(
-            f"dbname={db_name} host=localhost user={db_user} password={db_pass}"
+            f"dbname={db_name} user={db_user} password={db_pass}"
         )
 
         self.cursor = self.conn.cursor()
@@ -90,9 +29,7 @@ class Database:
         )
         self.conn.commit()
 
-    def fetchTopLeftAltitude(self, lat, lon):
-        pos = posFromLatLon(lat, lon)
-
+    def fetchAltitude(self, pos):
         self.cursor.execute(f"SELECT alt FROM altitude WHERE pos = {pos};")
 
         record = self.cursor.fetchone()
@@ -101,6 +38,11 @@ class Database:
             return None
 
         return int(record[0])
+
+    def fetchTopLeftAltitude(self, lat, lon):
+        pos = posFromLatLon(lat, lon)
+
+        return self.fetchAltitude(pos)
 
     def getCountAltitude(self):
 
@@ -127,3 +69,48 @@ class Database:
         execute_values(self.cursor, query, data)
 
         self.conn.commit()
+
+    def readTile(self, lat0, lon0):
+        begin = posFromLatLon(lat0, lon0)
+        end = posFromLatLon(lat0 + 1, lon0 + 1)
+
+        self.cursor.execute(
+            f"SELECT alt FROM altitude \
+              WHERE pos >= {begin} AND pos < {end} \
+              ORDER BY pos ASC"
+        )
+
+        record = self.cursor.fetchall()
+
+        if record is None:
+            return None
+
+        tile = []
+
+        tile_width = int(sqrt(len(record)))
+
+        i = 0
+
+        for x in range(tile_width):
+            row = []
+            for y in range(tile_width):
+                row.append(int(record[i][0]))
+                i = i + 1
+
+            tile.append(row)
+
+        return tile
+
+    def altitude(self, latitude, longitude):
+        tl, tr, bl, br, a, b = boundsFromLatLon(latitude, longitude)
+
+        # print (tl, tr, bl, br, a, b)
+
+        atl = self.fetchAltitude(tl)
+        atr = self.fetchAltitude(tr)
+        abl = self.fetchAltitude(bl)
+        abr = self.fetchAltitude(br)
+
+        # print (atl, atr, abl, abr)
+
+        return bilinearInterpolation(atl, atr, abl, abr, a, b)
