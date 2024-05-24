@@ -111,6 +111,6 @@ class Database:
         abl = self.fetchAltitude(bl)
         abr = self.fetchAltitude(br)
 
-        # print (atl, atr, abl, abr)
+        if atl is None or atr is None or abl is None or abr is None: return None
 
         return bilinearInterpolation(atl, atr, abl, abr, a, b)
